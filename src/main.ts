@@ -4,7 +4,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  try {
+    const app = await NestFactory.create(AppModule);
   
   // Habilitar validación global
   app.useGlobalPipes(
@@ -51,8 +52,12 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   const host = process.env.HOST || '0.0.0.0';
   
-  await app.listen(port, host);
-  console.log(`Application is running on: http://${host}:${port}`);
-  console.log(`Swagger documentation available at: http://${host}:${port}/api`);
+    await app.listen(port, host);
+    console.log(`Application is running on: http://${host}:${port}`);
+    console.log(`Swagger documentation available at: http://${host}:${port}/api`);
+  } catch (error) {
+    console.error('Error starting application:', error);
+    process.exit(1);
+  }
 }
 bootstrap();

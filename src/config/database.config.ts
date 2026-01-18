@@ -3,13 +3,15 @@ import { registerAs } from '@nestjs/config';
 export default registerAs('database', () => {
   // Si Railway proporciona DATABASE_URL, usarla (tiene prioridad)
   if (process.env.DATABASE_URL) {
+    // Railway usa SSL en sus conexiones
+    const isRailway = process.env.RAILWAY_ENVIRONMENT || process.env.DATABASE_URL?.includes('railway');
     return {
       type: 'postgres' as const,
       url: process.env.DATABASE_URL,
       entities: [__dirname + '/../**/*.entity{.ts,.js}'],
       synchronize: process.env.NODE_ENV !== 'production',
       logging: process.env.NODE_ENV === 'development',
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: isRailway ? { rejectUnauthorized: false } : false,
     };
   }
 
@@ -19,6 +21,9 @@ export default registerAs('database', () => {
   const username = process.env.PGUSER || process.env.POSGREST_USER || 'postgres';
   const password = process.env.PGPASSWORD || process.env.POSGREST_PASSWORD;
   const database = process.env.PGDATABASE || process.env.POSGREST_DB || 'railway';
+
+  // Railway usa SSL para conexiones internas
+  const isRailway = process.env.RAILWAY_ENVIRONMENT || host.includes('railway');
 
   return {
     type: 'postgres' as const,
@@ -30,6 +35,6 @@ export default registerAs('database', () => {
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     synchronize: process.env.NODE_ENV !== 'production',
     logging: process.env.NODE_ENV === 'development',
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: isRailway ? { rejectUnauthorized: false } : false,
   };
 });
