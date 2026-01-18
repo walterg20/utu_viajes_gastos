@@ -38,7 +38,7 @@ async function bootstrap() {
       'JWT-auth',
     )
     .build();
-
+  const host = process.env.HOST || 'localhost';
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document, {
     swaggerOptions: {
@@ -50,9 +50,8 @@ async function bootstrap() {
   app.enableCors();
 
   const port = process.env.PORT || 3000;
-  const host = process.env.HOST || '0.0.0.0';
   
-    await app.listen(port, host);
+    await app.listen(port);
     console.log(`Application is running on: http://${host}:${port}`);
     console.log(`Swagger documentation available at: http://${host}:${port}/api`);
   } catch (error) {
