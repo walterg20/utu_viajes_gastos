@@ -100,6 +100,11 @@ export class AuthService {
       throw new UnauthorizedException('Google Client ID no configurado');
     }
 
+    // Validar que el token no esté vacío
+    if (!googleLoginDto.idToken || !googleLoginDto.idToken.trim()) {
+      throw new UnauthorizedException('Token de Google requerido');
+    }
+
     const client = new OAuth2Client(clientId);
 
     try {
@@ -112,7 +117,7 @@ export class AuthService {
       const payload = ticket.getPayload();
       
       if (!payload || !payload.email) {
-        throw new UnauthorizedException('Token de Google inválido');
+        throw new UnauthorizedException('Token de Google inválido: no contiene email');
       }
 
       const { email, name, picture, sub: googleId } = payload;
@@ -155,7 +160,23 @@ export class AuthService {
         },
       };
     } catch (error) {
-      throw new UnauthorizedException('Token de Google inválido o expirado');
+      // Log del error para debugging (solo en desarrollo)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error validando token de Google:', error.message);
+      }
+      
+      // Mensaje de error más descriptivo
+      if (error.message?.includes('Token used too early')) {
+        throw new UnauthorizedException('Token de Google usado muy temprano. Verifica la hora de tu dispositivo.');
+      }
+      if (error.message?.includes('Token expired')) {
+        throw new UnauthorizedException('Token de Google expirado. Intenta iniciar sesión nuevamente.');
+      }
+      if (error.message?.includes('audience')) {
+        throw new UnauthorizedException('Token de Google no válido para esta aplicación. Verifica el Client ID.');
+      }
+      
+      throw new UnauthorizedException(`Token de Google inválido: ${error.message || 'Error desconocido'}`);
     }
   }
 }

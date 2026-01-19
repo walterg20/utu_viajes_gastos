@@ -54,8 +54,16 @@ export class AppService {
             text-align: center;
         }
         .logo {
-            font-size: 48px;
             margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .logo img {
+            max-width: 250px;
+            max-height: 250px;
+            width: auto;
+            height: auto;
         }
         h1 {
             color: #667eea;
@@ -142,7 +150,9 @@ export class AppService {
 </head>
 <body>
     <div class="container">
-        <div class="logo">🚂</div>
+        <div class="logo">
+            <img src="/public/logo.png" alt="UTU Logo" style="width: 80px; height: 80px; object-fit: contain;">
+        </div>
         <h1>UTU Viajes y Gastos API</h1>
         <p class="subtitle">Sistema completo para la gestión de viajes, gastos, listas de compra y cotizaciones de monedas</p>
         
