@@ -1,5 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { AppService } from './app.service';
 import { Public } from './modules/auth/decorators/public.decorator';
 
@@ -10,12 +11,24 @@ export class AppController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Endpoint de bienvenida' })
+  @ApiOperation({
+    summary: 'Endpoint de bienvenida',
+    description: 'Retorna una página HTML estilizada de bienvenida. Este es el endpoint raíz de la API UTU Viajes y Gastos. Accede a /api para ver la documentación completa de Swagger.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Mensaje de bienvenida',
+    description: 'Página HTML estilizada de bienvenida retornada exitosamente',
+    content: {
+      'text/html': {
+        schema: {
+          type: 'string',
+          example: '<html>...</html>',
+        },
+      },
+    },
   })
-  getHello(): string {
-    return this.appService.getHello();
+  getHello(@Res() res: Response): void {
+    res.setHeader('Content-Type', 'text/html');
+    res.send(this.appService.getHello());
   }
 }

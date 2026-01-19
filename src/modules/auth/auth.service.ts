@@ -75,6 +75,24 @@ export class AuthService {
     return await this.usersService.findOne(userId);
   }
 
+  async checkStatus(userId: string) {
+    const user = await this.usersService.findOne(userId);
+    
+    // Eliminar password del objeto de respuesta
+    const { password, ...userWithoutPassword } = user;
+    
+    return {
+      valid: true,
+      user: {
+        id: userWithoutPassword.id,
+        email: userWithoutPassword.email,
+        name: userWithoutPassword.name,
+        photoUrl: userWithoutPassword.photoUrl,
+        createdAt: userWithoutPassword.createdAt,
+      },
+    };
+  }
+
   async googleLogin(googleLoginDto: GoogleLoginDto) {
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     

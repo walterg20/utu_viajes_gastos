@@ -14,6 +14,7 @@ export default registerAs('database', () => {
       ssl: isRailway ? { rejectUnauthorized: false } : false,
     };
   }
+  
 
   // Usar variables individuales (Railway también proporciona PGHOST, PGPORT, etc.)
   const host = process.env.PGHOST || process.env.POSGREST_HOST || 'localhost';

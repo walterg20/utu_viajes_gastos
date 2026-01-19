@@ -1,10 +1,11 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Get, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from '../../dto/register.dto';
 import { LoginDto } from '../../dto/login.dto';
 import { GoogleLoginDto } from '../../dto/google-login.dto';
 import { Public } from './decorators/public.decorator';
+import { CurrentUser } from './decorators/current-user.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -79,5 +80,34 @@ export class AuthController {
   })
   googleLogin(@Body() googleLoginDto: GoogleLoginDto) {
     return this.authService.googleLogin(googleLoginDto);
+  }
+
+  @Get('check-status')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Verificar estado del token JWT',
+    description: 'Verifica si el token JWT es válido y retorna la información del usuario autenticado. Usa este endpoint para validar el token en el frontend.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Token válido, información del usuario retornada',
+    schema: {
+      example: {
+        valid: true,
+        user: {
+          id: '123e4567-e89b-12d3-a456-426614174000',
+          email: 'usuario@ejemplo.com',
+          name: 'Juan Pérez',
+          photoUrl: 'https://ejemplo.com/foto.jpg',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Token inválido o expirado',
+  })
+  async checkStatus(@CurrentUser() user: any) {
+    return this.authService.checkStatus(user.userId);
   }
 }
