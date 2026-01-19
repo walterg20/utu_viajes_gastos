@@ -105,14 +105,40 @@ export class AuthService {
       throw new UnauthorizedException('Token de Google requerido');
     }
 
+    // Validar formato básico del JWT (debe tener 3 partes separadas por punto)
+    const tokenParts = googleLoginDto.idToken.split('.');
+    if (tokenParts.length !== 3) {
+      throw new UnauthorizedException(
+        'Formato de token inválido. Asegúrate de enviar un Google ID Token (no Access Token)'
+      );
+    }
+
+    // En desarrollo, log del header del token para debugging
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        const header = JSON.parse(Buffer.from(tokenParts[0], 'base64').toString());
+        console.log('Token header:', header);
+        console.log('GOOGLE_CLIENT_ID configurado:', clientId.substring(0, 20) + '...');
+      } catch (e) {
+        console.warn('No se pudo decodificar el header del token');
+      }
+    }
+
+    // Crear cliente OAuth2 con configuración mejorada
     const client = new OAuth2Client(clientId);
 
     try {
       // Verificar el token de Google
+      // La librería descargará automáticamente las claves públicas de Google
       const ticket = await client.verifyIdToken({
         idToken: googleLoginDto.idToken,
         audience: clientId,
       });
+
+      // Verificar que el ticket sea válido
+      if (!ticket) {
+        throw new UnauthorizedException('Token de Google inválido: no se pudo verificar');
+      }
 
       const payload = ticket.getPayload();
       
@@ -160,23 +186,42 @@ export class AuthService {
         },
       };
     } catch (error) {
-      // Log del error para debugging (solo en desarrollo)
+      // Log del error completo para debugging (solo en desarrollo)
       if (process.env.NODE_ENV === 'development') {
-        console.error('Error validando token de Google:', error.message);
+        console.error('Error completo validando token de Google:', error);
+        console.error('Mensaje de error:', error.message);
+        console.error('Stack trace:', error.stack);
       }
       
-      // Mensaje de error más descriptivo
-      if (error.message?.includes('Token used too early')) {
+      // Mensaje de error más descriptivo según el tipo de error
+      const errorMessage = error.message || '';
+      
+      if (errorMessage.includes('Token used too early')) {
         throw new UnauthorizedException('Token de Google usado muy temprano. Verifica la hora de tu dispositivo.');
       }
-      if (error.message?.includes('Token expired')) {
+      
+      if (errorMessage.includes('Token expired')) {
         throw new UnauthorizedException('Token de Google expirado. Intenta iniciar sesión nuevamente.');
       }
-      if (error.message?.includes('audience')) {
-        throw new UnauthorizedException('Token de Google no válido para esta aplicación. Verifica el Client ID.');
+      
+      if (errorMessage.includes('audience') || errorMessage.includes('Client ID')) {
+        throw new UnauthorizedException('Token de Google no válido para esta aplicación. Verifica el Client ID en la configuración.');
       }
       
-      throw new UnauthorizedException(`Token de Google inválido: ${error.message || 'Error desconocido'}`);
+      // Error específico de clave pública (PEM)
+      if (errorMessage.includes('No pem found for envelope') || errorMessage.includes('PEM')) {
+        throw new UnauthorizedException(
+          'Error verificando token de Google: No se pudo obtener la clave pública. ' +
+          'Verifica que el servidor tenga acceso a internet y que el token sea válido. ' +
+          'Asegúrate de usar el ID Token (no el Access Token) desde Google Sign-In.'
+        );
+      }
+      
+      // Error genérico pero más informativo
+      throw new UnauthorizedException(
+        `Token de Google inválido: ${errorMessage || 'Error desconocido'}. ` +
+        'Verifica que estés enviando un ID Token válido de Google Sign-In.'
+      );
     }
   }
 }
