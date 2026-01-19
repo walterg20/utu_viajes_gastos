@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
+import * as admin from 'firebase-admin';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from '../../dto/register.dto';
 import { LoginDto } from '../../dto/login.dto';
@@ -14,11 +15,39 @@ import { GoogleLoginDto } from '../../dto/google-login.dto';
 
 @Injectable()
 export class AuthService {
+  private firebaseApp: admin.app.App | null = null;
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
-  ) {}
+  ) {
+    // Inicializar Firebase Admin si está configurado
+    this.initializeFirebase();
+  }
+
+  private initializeFirebase() {
+    const firebaseProjectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
+    const firebasePrivateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY');
+    const firebaseClientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL');
+
+    if (firebaseProjectId && firebasePrivateKey && firebaseClientEmail) {
+      try {
+        this.firebaseApp = admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId: firebaseProjectId,
+            privateKey: firebasePrivateKey.replace(/\\n/g, '\n'),
+            clientEmail: firebaseClientEmail,
+          }),
+        });
+        console.log('Firebase Admin SDK inicializado correctamente');
+      } catch (error: any) {
+        console.warn('Error inicializando Firebase Admin SDK:', error.message);
+      }
+    } else {
+      console.warn('Firebase Admin SDK no configurado. Solo se pueden verificar tokens de Google Sign-In directo.');
+    }
+  }
 
   async register(registerDto: RegisterDto) {
     const existingUser = await this.usersService.findByEmail(registerDto.email);
@@ -94,134 +123,174 @@ export class AuthService {
   }
 
   async googleLogin(googleLoginDto: GoogleLoginDto) {
-    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
-    
-    if (!clientId) {
-      throw new UnauthorizedException('Google Client ID no configurado');
-    }
-
     // Validar que el token no esté vacío
     if (!googleLoginDto.idToken || !googleLoginDto.idToken.trim()) {
-      throw new UnauthorizedException('Token de Google requerido');
+      throw new UnauthorizedException('Token requerido');
     }
 
     // Validar formato básico del JWT (debe tener 3 partes separadas por punto)
     const tokenParts = googleLoginDto.idToken.split('.');
     if (tokenParts.length !== 3) {
       throw new UnauthorizedException(
-        'Formato de token inválido. Asegúrate de enviar un Google ID Token (no Access Token)'
+        'Formato de token inválido. Asegúrate de enviar un ID Token válido'
       );
     }
 
-    // En desarrollo, log del header del token para debugging
-    if (process.env.NODE_ENV === 'development') {
-      try {
-        const header = JSON.parse(Buffer.from(tokenParts[0], 'base64').toString());
-        console.log('Token header:', header);
-        console.log('GOOGLE_CLIENT_ID configurado:', clientId.substring(0, 20) + '...');
-      } catch (e) {
-        console.warn('No se pudo decodificar el header del token');
-      }
+    // Decodificar header y payload del token para determinar el tipo
+    let tokenHeader: any = null;
+    let decodedPayload: any = null;
+    
+    try {
+      tokenHeader = JSON.parse(Buffer.from(tokenParts[0], 'base64').toString());
+      decodedPayload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+      
+      console.log('Token header:', tokenHeader);
+      console.log('Token payload (decodificado):', {
+        iss: decodedPayload.iss,
+        aud: decodedPayload.aud,
+        exp: decodedPayload.exp,
+        email: decodedPayload.email,
+      });
+    } catch (decodeError: any) {
+      throw new UnauthorizedException('Token mal formado: no se pudo decodificar');
     }
 
-    // Crear cliente OAuth2 con configuración mejorada
-    const client = new OAuth2Client(clientId);
+    // Determinar si es un token de Firebase Auth
+    const isFirebaseToken = decodedPayload.iss && (
+      decodedPayload.iss.includes('firebase') || 
+      decodedPayload.iss.includes('securetoken.google.com')
+    );
 
-    try {
-      // Verificar el token de Google
-      // La librería descargará automáticamente las claves públicas de Google
-      const ticket = await client.verifyIdToken({
-        idToken: googleLoginDto.idToken,
-        audience: clientId,
-      });
+    let payload: any;
 
-      // Verificar que el ticket sea válido
-      if (!ticket) {
-        throw new UnauthorizedException('Token de Google inválido: no se pudo verificar');
-      }
-
-      const payload = ticket.getPayload();
-      
-      if (!payload || !payload.email) {
-        throw new UnauthorizedException('Token de Google inválido: no contiene email');
-      }
-
-      const { email, name, picture, sub: googleId } = payload;
-
-      // Buscar o crear usuario
-      let user = await this.usersService.findByEmail(email);
-
-      if (!user) {
-        // Crear nuevo usuario con Google
-        user = await this.usersService.create({
-          email,
-          name: name || undefined,
-          photoUrl: picture || undefined,
-          password: undefined, // Usuarios de Google no tienen password
-        });
-      } else {
-        // Actualizar información si cambió
-        const updatedName = name || user.name || undefined;
-        const updatedPhotoUrl = picture || user.photoUrl || undefined;
-        
-        if (user.name !== updatedName || user.photoUrl !== updatedPhotoUrl) {
-          await this.usersService.update(user.id, {
-            name: updatedName,
-            photoUrl: updatedPhotoUrl,
-          });
-          // Recargar usuario actualizado
-          user = await this.usersService.findOne(user.id);
-        }
-      }
-
-      // Generar JWT propio
-      const jwtPayload = { email: user.email, sub: user.id };
-      return {
-        access_token: this.jwtService.sign(jwtPayload),
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          photoUrl: user.photoUrl,
-        },
-      };
-    } catch (error) {
-      // Log del error completo para debugging (solo en desarrollo)
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error completo validando token de Google:', error);
-        console.error('Mensaje de error:', error.message);
-        console.error('Stack trace:', error.stack);
-      }
-      
-      // Mensaje de error más descriptivo según el tipo de error
-      const errorMessage = error.message || '';
-      
-      if (errorMessage.includes('Token used too early')) {
-        throw new UnauthorizedException('Token de Google usado muy temprano. Verifica la hora de tu dispositivo.');
-      }
-      
-      if (errorMessage.includes('Token expired')) {
-        throw new UnauthorizedException('Token de Google expirado. Intenta iniciar sesión nuevamente.');
-      }
-      
-      if (errorMessage.includes('audience') || errorMessage.includes('Client ID')) {
-        throw new UnauthorizedException('Token de Google no válido para esta aplicación. Verifica el Client ID en la configuración.');
-      }
-      
-      // Error específico de clave pública (PEM)
-      if (errorMessage.includes('No pem found for envelope') || errorMessage.includes('PEM')) {
+    if (isFirebaseToken) {
+      // Verificar token de Firebase usando Firebase Admin SDK
+      if (!this.firebaseApp) {
         throw new UnauthorizedException(
-          'Error verificando token de Google: No se pudo obtener la clave pública. ' +
-          'Verifica que el servidor tenga acceso a internet y que el token sea válido. ' +
-          'Asegúrate de usar el ID Token (no el Access Token) desde Google Sign-In.'
+          'Este es un token de Firebase Auth, pero Firebase Admin SDK no está configurado. ' +
+          'Agrega las variables de entorno: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL'
         );
       }
+
+      try {
+        console.log('Verificando token de Firebase Auth...');
+        const decodedToken = await admin.auth().verifyIdToken(googleLoginDto.idToken);
+        
+        payload = {
+          email: decodedToken.email,
+          name: decodedToken.name,
+          picture: decodedToken.picture,
+          sub: decodedToken.uid,
+        };
+        
+        console.log('Token de Firebase verificado correctamente');
+      } catch (firebaseError: any) {
+        throw new UnauthorizedException(
+          `Error verificando token de Firebase: ${firebaseError.message}`
+        );
+      }
+    } else {
+      // Verificar token de Google Sign-In directo usando google-auth-library
+      const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
       
-      // Error genérico pero más informativo
-      throw new UnauthorizedException(
-        `Token de Google inválido: ${errorMessage || 'Error desconocido'}. ` +
-        'Verifica que estés enviando un ID Token válido de Google Sign-In.'
-      );
+      if (!clientId) {
+        throw new UnauthorizedException('Google Client ID no configurado');
+      }
+
+      // Usar el Client ID del token si es diferente al configurado
+      let verificationClientId = clientId;
+      if (decodedPayload.aud && decodedPayload.aud !== clientId) {
+        console.warn(`⚠️ Client ID del token (${decodedPayload.aud}) difiere del configurado (${clientId})`);
+        console.warn(`   Usando el Client ID del token para la verificación...`);
+        verificationClientId = decodedPayload.aud;
+      }
+
+      const client = new OAuth2Client(verificationClientId);
+
+      try {
+        console.log('Verificando token de Google Sign-In...');
+        const ticket = await client.verifyIdToken({
+          idToken: googleLoginDto.idToken,
+          audience: verificationClientId,
+        });
+
+        if (!ticket) {
+          throw new UnauthorizedException('Token de Google inválido: no se pudo verificar');
+        }
+
+        const ticketPayload = ticket.getPayload();
+        
+        if (!ticketPayload || !ticketPayload.email) {
+          throw new UnauthorizedException('Token de Google inválido: no contiene email');
+        }
+
+        payload = {
+          email: ticketPayload.email,
+          name: ticketPayload.name,
+          picture: ticketPayload.picture,
+          sub: ticketPayload.sub,
+        };
+
+        console.log('Token de Google Sign-In verificado correctamente');
+      } catch (googleError: any) {
+        const errorMessage = googleError.message || '';
+        
+        if (errorMessage.includes('No pem found')) {
+          throw new UnauthorizedException(
+            'Error verificando token de Google: No se pudo obtener la clave pública. ' +
+            'Verifica que el servidor tenga acceso a internet para descargar claves de Google.'
+          );
+        }
+        
+        throw new UnauthorizedException(
+          `Error verificando token de Google: ${errorMessage}`
+        );
+      }
     }
+
+    // Ahora usar payload (ya sea de Firebase o Google Sign-In)
+    const { email, name, picture, sub: googleId } = payload;
+
+    if (!email) {
+      throw new UnauthorizedException('Token inválido: no contiene email');
+    }
+
+    // Buscar o crear usuario
+    let user = await this.usersService.findByEmail(email);
+
+    if (!user) {
+      // Crear nuevo usuario
+      user = await this.usersService.create({
+        email,
+        name: name || undefined,
+        photoUrl: picture || undefined,
+        password: undefined, // Usuarios de OAuth no tienen password
+      });
+    } else {
+      // Actualizar información si cambió
+      const updatedName = name || user.name || undefined;
+      const updatedPhotoUrl = picture || user.photoUrl || undefined;
+      
+      if (user.name !== updatedName || user.photoUrl !== updatedPhotoUrl) {
+        await this.usersService.update(user.id, {
+          name: updatedName,
+          photoUrl: updatedPhotoUrl,
+        });
+        // Recargar usuario actualizado
+        user = await this.usersService.findOne(user.id);
+      }
+    }
+
+    // Generar JWT propio
+    const jwtPayload = { email: user.email, sub: user.id };
+    return {
+      access_token: this.jwtService.sign(jwtPayload),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        photoUrl: user.photoUrl,
+      },
+    };
   }
 }
