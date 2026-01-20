@@ -40,12 +40,9 @@ export class AuthService {
             clientEmail: firebaseClientEmail,
           }),
         });
-        console.log('Firebase Admin SDK inicializado correctamente');
       } catch (error: any) {
-        console.warn('Error inicializando Firebase Admin SDK:', error.message);
       }
     } else {
-      console.warn('Firebase Admin SDK no configurado. Solo se pueden verificar tokens de Google Sign-In directo.');
     }
   }
 
@@ -137,20 +134,10 @@ export class AuthService {
     }
 
     // Decodificar header y payload del token para determinar el tipo
-    let tokenHeader: any = null;
     let decodedPayload: any = null;
     
     try {
-      tokenHeader = JSON.parse(Buffer.from(tokenParts[0], 'base64').toString());
       decodedPayload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-      
-      console.log('Token header:', tokenHeader);
-      console.log('Token payload (decodificado):', {
-        iss: decodedPayload.iss,
-        aud: decodedPayload.aud,
-        exp: decodedPayload.exp,
-        email: decodedPayload.email,
-      });
     } catch (decodeError: any) {
       throw new UnauthorizedException('Token mal formado: no se pudo decodificar');
     }
@@ -173,7 +160,6 @@ export class AuthService {
       }
 
       try {
-        console.log('Verificando token de Firebase Auth...');
         const decodedToken = await admin.auth().verifyIdToken(googleLoginDto.idToken);
         
         payload = {
@@ -183,7 +169,6 @@ export class AuthService {
           sub: decodedToken.uid,
         };
         
-        console.log('Token de Firebase verificado correctamente');
       } catch (firebaseError: any) {
         throw new UnauthorizedException(
           `Error verificando token de Firebase: ${firebaseError.message}`
@@ -200,15 +185,12 @@ export class AuthService {
       // Usar el Client ID del token si es diferente al configurado
       let verificationClientId = clientId;
       if (decodedPayload.aud && decodedPayload.aud !== clientId) {
-        console.warn(`⚠️ Client ID del token (${decodedPayload.aud}) difiere del configurado (${clientId})`);
-        console.warn(`   Usando el Client ID del token para la verificación...`);
         verificationClientId = decodedPayload.aud;
       }
 
       const client = new OAuth2Client(verificationClientId);
 
       try {
-        console.log('Verificando token de Google Sign-In...');
         const ticket = await client.verifyIdToken({
           idToken: googleLoginDto.idToken,
           audience: verificationClientId,
@@ -231,7 +213,6 @@ export class AuthService {
           sub: ticketPayload.sub,
         };
 
-        console.log('Token de Google Sign-In verificado correctamente');
       } catch (googleError: any) {
         const errorMessage = googleError.message || '';
         
