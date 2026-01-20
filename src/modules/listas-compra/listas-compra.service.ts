@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ListaCompra } from '../../entities/lista-compra.entity';
 import { Producto } from '../../entities/producto.entity';
 import { CreateListaCompraDto } from '../../dto/create-lista-compra.dto';
+import { CreateProductoDto } from '../../dto/create-producto.dto';
 
 @Injectable()
 export class ListasCompraService {
@@ -71,5 +72,58 @@ export class ListasCompraService {
   async remove(id: string): Promise<void> {
     const listaCompra = await this.findOne(id);
     await this.listaCompraRepository.remove(listaCompra);
+  }
+
+  async addProductoToLista(
+    listaId: string,
+    createProductoDto: CreateProductoDto,
+  ): Promise<ListaCompra> {
+    // Verificar que la lista existe
+    const listaCompra = await this.findOne(listaId);
+
+    // Crear el producto y asociarlo a la lista
+    const producto = this.productoRepository.create({
+      nombre: createProductoDto.nombre,
+      cantidad: createProductoDto.cantidad ?? 1,
+      unidad: createProductoDto.unidad ?? 'un',
+      precio: createProductoDto.precio ?? 0,
+      imagenUrl: createProductoDto.imagenUrl,
+      enCarrito: createProductoDto.enCarrito ?? false,
+      listaCompraId: listaId,
+    });
+
+    await this.productoRepository.save(producto);
+
+    // Retornar la lista actualizada con todos sus productos
+    return await this.findOne(listaId);
+  }
+
+  async removeProductoFromLista(
+    listaId: string,
+    productoId: string,
+  ): Promise<void> {
+    // Verificar que la lista existe
+    await this.findOne(listaId);
+
+    // Buscar el producto
+    const producto = await this.productoRepository.findOne({
+      where: { id: productoId },
+    });
+
+    if (!producto) {
+      throw new NotFoundException(
+        `Producto con ID ${productoId} no encontrado`,
+      );
+    }
+
+    // Verificar que el producto pertenece a la lista
+    if (producto.listaCompraId !== listaId) {
+      throw new BadRequestException(
+        `El producto ${productoId} no pertenece a la lista ${listaId}`,
+      );
+    }
+
+    // Eliminar el producto
+    await this.productoRepository.remove(producto);
   }
 }

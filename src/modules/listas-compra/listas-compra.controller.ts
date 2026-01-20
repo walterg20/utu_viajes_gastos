@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { ListasCompraService } from './listas-compra.service';
 import { CreateListaCompraDto } from '../../dto/create-lista-compra.dto';
+import { CreateProductoDto } from '../../dto/create-producto.dto';
 
 @ApiTags('listas-compra')
 @ApiBearerAuth('JWT-auth')
@@ -117,5 +118,66 @@ export class ListasCompraController {
   })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.listasCompraService.remove(id);
+  }
+
+  @Post(':listaId/productos')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Agregar un producto a una lista de compra' })
+  @ApiParam({
+    name: 'listaId',
+    description: 'UUID de la lista de compra',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Producto agregado a la lista exitosamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Lista de compra no encontrada',
+  })
+  addProductoToLista(
+    @Param('listaId', ParseUUIDPipe) listaId: string,
+    @Body() createProductoDto: CreateProductoDto,
+  ) {
+    return this.listasCompraService.addProductoToLista(
+      listaId,
+      createProductoDto,
+    );
+  }
+
+  @Delete(':listaId/productos/:productoId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Eliminar un producto de una lista de compra' })
+  @ApiParam({
+    name: 'listaId',
+    description: 'UUID de la lista de compra',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiParam({
+    name: 'productoId',
+    description: 'UUID del producto',
+    example: '123e4567-e89b-12d3-a456-426614174001',
+  })
+  @ApiResponse({
+    status: 204,
+    description: 'Producto eliminado de la lista exitosamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Lista de compra o producto no encontrado',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'El producto no pertenece a la lista especificada',
+  })
+  removeProductoFromLista(
+    @Param('listaId', ParseUUIDPipe) listaId: string,
+    @Param('productoId', ParseUUIDPipe) productoId: string,
+  ) {
+    return this.listasCompraService.removeProductoFromLista(
+      listaId,
+      productoId,
+    );
   }
 }
