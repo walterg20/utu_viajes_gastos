@@ -10,6 +10,14 @@ export class CreateListaCompraDto {
   @IsString()
   nombre: string;
 
+  @ApiPropertyOptional({
+    description: 'Moneda de la lista de compra',
+    example: 'USD',
+  })
+  @IsOptional()
+  @IsString()
+  moneda?: string;
+
   @ApiProperty({
     description: 'ID del usuario propietario de la lista',
     example: '123e4567-e89b-12d3-a456-426614174000',

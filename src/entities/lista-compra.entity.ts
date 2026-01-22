@@ -17,6 +17,9 @@ export class ListaCompra {
   @Column({ type: 'varchar', length: 255 })
   nombre: string;
 
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  moneda: string;
+
   @Column({ type: 'uuid', name: 'user_id' })
   userId: string;
 

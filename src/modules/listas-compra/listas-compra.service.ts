@@ -18,6 +18,7 @@ export class ListasCompraService {
   async create(createListaCompraDto: CreateListaCompraDto): Promise<ListaCompra> {
     const listaCompra = this.listaCompraRepository.create({
       nombre: createListaCompraDto.nombre,
+      moneda: createListaCompraDto.moneda,
       userId: createListaCompraDto.userId,
     });
 
