@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  Put,
   Delete,
   ParseUUIDPipe,
   Query,
@@ -143,6 +144,42 @@ export class ListasCompraController {
     return this.listasCompraService.addProductoToLista(
       listaId,
       createProductoDto,
+    );
+  }
+
+  @Put(':listaId/productos/:productoId')
+  @ApiOperation({ summary: 'Actualizar un producto de una lista de compra' })
+  @ApiParam({
+    name: 'listaId',
+    description: 'UUID de la lista de compra',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiParam({
+    name: 'productoId',
+    description: 'UUID del producto',
+    example: '123e4567-e89b-12d3-a456-426614174001',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Producto actualizado exitosamente. Retorna la lista actualizada.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Lista de compra o producto no encontrado',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'El producto no pertenece a la lista especificada',
+  })
+  updateProductoInLista(
+    @Param('listaId', ParseUUIDPipe) listaId: string,
+    @Param('productoId', ParseUUIDPipe) productoId: string,
+    @Body() updateProductoDto: Partial<CreateProductoDto>,
+  ) {
+    return this.listasCompraService.updateProductoInLista(
+      listaId,
+      productoId,
+      updateProductoDto,
     );
   }
 

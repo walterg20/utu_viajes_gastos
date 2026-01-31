@@ -127,4 +127,43 @@ export class ListasCompraService {
     // Eliminar el producto
     await this.productoRepository.remove(producto);
   }
+
+  async updateProductoInLista(
+    listaId: string,
+    productoId: string,
+    updateProductoDto: Partial<CreateProductoDto>,
+  ): Promise<ListaCompra> {
+    // Verificar que la lista existe
+    await this.findOne(listaId);
+
+    // Buscar el producto
+    const producto = await this.productoRepository.findOne({
+      where: { id: productoId },
+    });
+
+    if (!producto) {
+      throw new NotFoundException(
+        `Producto con ID ${productoId} no encontrado`,
+      );
+    }
+
+    // Verificar que el producto pertenece a la lista
+    if (producto.listaCompraId !== listaId) {
+      throw new BadRequestException(
+        `El producto ${productoId} no pertenece a la lista ${listaId}`,
+      );
+    }
+
+    // Actualizar solo los campos enviados
+    if (updateProductoDto.nombre !== undefined) producto.nombre = updateProductoDto.nombre;
+    if (updateProductoDto.cantidad !== undefined) producto.cantidad = updateProductoDto.cantidad;
+    if (updateProductoDto.unidad !== undefined) producto.unidad = updateProductoDto.unidad;
+    if (updateProductoDto.precio !== undefined) producto.precio = updateProductoDto.precio;
+    if (updateProductoDto.imagenUrl !== undefined) producto.imagenUrl = updateProductoDto.imagenUrl;
+    if (updateProductoDto.enCarrito !== undefined) producto.enCarrito = updateProductoDto.enCarrito;
+
+    await this.productoRepository.save(producto);
+
+    return await this.findOne(listaId);
+  }
 }
